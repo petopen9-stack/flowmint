@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nearaction"
+version = "0.1.0"
+description = "Durable, resumable agent workflows on NEAR with human gates, verifiable receipts, and policy-controlled payments"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "petopen9-stack"}]
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+near = ["near-api-py>=0.1.0"]  # optional for real on-chain anchoring
+
+[project.scripts]
+nearaction = "nearaction.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nearaction*"]

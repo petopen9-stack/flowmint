@@ -1,0 +1,10 @@
+title: Simple human-gated task
+description: Minimal durable action with one approval gate
+steps:
+  - name: draft
+    instruction: Create a short proposal or draft based on the current context
+  - name: review
+    instruction: Human reviews and approves the draft
+    needs_approval: true
+  - name: finalize
+    instruction: Apply any feedback and mark the work complete

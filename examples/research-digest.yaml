@@ -1,0 +1,32 @@
+title: Weekly research digest + tip
+description: Classic durable pipeline with a final payment step (agentic tip)
+require_approval: true
+tags:
+  - research
+  - payment
+steps:
+  - name: gather
+    instruction: >
+      Search recent sources (last 7 days) for the highest-signal items
+      related to the current research theme. Prefer primary sources.
+  - name: summarize
+    instruction: >
+      Write a concise, neutral bullet-point summary for each collected item.
+      Include title, source, date, and 2–3 key takeaways.
+  - name: human-review
+    instruction: >
+      Present the draft digest for human approval before any publishing or payment.
+    needs_approval: true
+  - name: publish
+    instruction: >
+      Publish the approved digest to the configured destination
+      (Telegram, email, Notion, X, etc.).
+  - name: tip-source
+    type: payment
+    instruction: >
+      Send a small thank-you tip to the most valuable source via NEAR Intents
+      (or the policy wallet once connected).
+    payment:
+      amount: "0.5"
+      token: "NEAR"
+      # recipient can be filled at runtime or taken from an allowlist
