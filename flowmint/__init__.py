@@ -1,5 +1,5 @@
 """
-NearAction — Durable agent workflows on NEAR
+FlowMint — Durable agent workflows on NEAR
 
 Durable, resumable, checkpointed actions with human-approval gates,
 verifiable hash-chained receipts, x402 micropayments, and policy-ready

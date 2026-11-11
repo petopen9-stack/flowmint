@@ -1,4 +1,4 @@
-# NearAction — NEAR HACKATHON 2026
+# FlowMint — NEAR HACKATHON 2026
 
 ## Track
 **Primary:** Agent Economy  
@@ -10,10 +10,10 @@ Durable agent workflows with human/policy gates, verifiable receipts, and native
 ## Demo for judges (no network)
 
 ```bash
-git clone https://github.com/petopen9-stack/nearaction.git
-cd nearaction
+git clone https://github.com/petopen9-stack/flowmint.git
+cd flowmint
 pip install -e .
-nearaction demo
+flowmint demo
 ```
 
 Expected: create → gates → x402 mock challenge → confirm → receipt chain with `x402_challenged` → anchor root.
@@ -28,14 +28,14 @@ Details: [DEMO.md](./DEMO.md)
 - **Security** — money steps default to `waiting_approval`; receipt chain for audit  
 
 ## Submission checklist
-- [x] Public repo: https://github.com/petopen9-stack/nearaction  
+- [x] Public repo: https://github.com/petopen9-stack/flowmint  
 - [ ] Demo post on X (tag @NEARProtocol #NEARHackathon) — use caption in DEMO.md  
 - [ ] Submit form with repo + X post + NEAR payout address  
 - [ ] Preferred track: Agent Economy  
 
 ## Do X, see Y
 
-1. `nearaction demo` → full offline flow completes  
-2. `nearaction history <id>` → see `created`, `x402_challenged`, `step_completed`, `completed`  
-3. `nearaction anchor <id>` → `root_hash` ready for NEAR  
-4. Restart shell, `nearaction status <id>` → state still there (`~/.nearaction/`)  
+1. `flowmint demo` → full offline flow completes  
+2. `flowmint history <id>` → see `created`, `x402_challenged`, `step_completed`, `completed`  
+3. `flowmint anchor <id>` → `root_hash` ready for NEAR  
+4. Restart shell, `flowmint status <id>` → state still there (`~/.flowmint/`)  

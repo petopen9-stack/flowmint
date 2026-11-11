@@ -1,4 +1,4 @@
-"""Local durable storage under ~/.nearaction/"""
+"""Local durable storage under ~/.flowmint/"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 
 def data_dir() -> Path:
-    p = Path.home() / ".nearaction"
+    p = Path.home() / ".flowmint"
     p.mkdir(parents=True, exist_ok=True)
     return p
 

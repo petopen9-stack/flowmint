@@ -1,5 +1,5 @@
 """
-x402 payment support for NearAction.
+x402 payment support for FlowMint.
 
 x402 = open standard that uses HTTP 402 Payment Required so agents can
 pay for APIs / data / services with stablecoins (or NEAR) inside the

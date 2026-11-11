@@ -1,4 +1,4 @@
-"""Simple CLI for NearAction — fully demoable offline."""
+"""Simple CLI for FlowMint — fully demoable offline."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from . import tools
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="nearaction", description="Durable agent workflows on NEAR + x402")
+    parser = argparse.ArgumentParser(prog="flowmint", description="Durable agent workflows on NEAR + x402")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_create = sub.add_parser("create", help="Create a durable action from a YAML file")
@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_demo() -> int:
-    print("=== NearAction offline demo ===\n")
+    print("=== FlowMint offline demo ===\n")
 
     example = Path(__file__).resolve().parent.parent / "examples" / "x402-api-call.yaml"
     if example.exists():
@@ -261,8 +261,8 @@ def _run_demo() -> int:
     print(f"\n6. Anchor prepared: root={str(anc.get('root_hash', ''))[:16]}…")
     print("\n=== Demo complete. Action is durable, gated, paid (x402), and auditable. ===")
     print(f"Action id: {aid}")
-    print("Inspect: nearaction status", aid)
-    print("         nearaction history", aid)
+    print("Inspect: flowmint status", aid)
+    print("         flowmint history", aid)
     return 0
 
 

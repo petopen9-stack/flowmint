@@ -41,7 +41,7 @@ def tool_create(
         "title": action["title"],
         "status": action["status"],
         "steps": len(action["steps"]),
-        "message": f"Durable action '{action['id']}' created. Use nearaction_resume to start.",
+        "message": f"Durable action '{action['id']}' created. Use flowmint_resume to start.",
     }
 
 
@@ -103,7 +103,7 @@ def tool_resume(action_id: str, note: str = "") -> dict:
         "instruction": current["instruction"],
         "payment": current.get("payment"),
         "x402": current.get("x402"),
-        "message": "Execute this step, then call nearaction_approve with the result.",
+        "message": "Execute this step, then call flowmint_approve with the result.",
     }
 
 
@@ -278,7 +278,7 @@ def tool_x402_challenge(
         "payment_intent": intent,
         "message": (
             "402 challenge recorded. Review the payment_intent, sign it with a policy-limited key, "
-            "then call nearaction_x402_confirm after the paid request succeeds."
+            "then call flowmint_x402_confirm after the paid request succeeds."
         ),
     }
 

@@ -1,7 +1,7 @@
 """Minimal tests — run with: python -m pytest tests/ -q"""
 
-from nearaction import tools
-from nearaction.x402 import parse_402_response, select_accept_option, prepare_payment_intent
+from flowmint import tools
+from flowmint.x402 import parse_402_response, select_accept_option, prepare_payment_intent
 
 
 def test_create_resume_approve():
