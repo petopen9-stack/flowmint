@@ -1,7 +1,7 @@
 # NearAction
 
 > Durable, resumable, checkpointed agent workflows on NEAR  
-> with human-approval gates, verifiable receipts, and policy-controlled payments.
+> with human-approval gates, verifiable receipts, **x402 micropayments**, and policy-controlled spending.
 
 **Built for [NEAR HACKATHON 2026](https://nearhackathon.com)**  
 Tracks: **Agent Economy** · **AI Security & Defense** · **Autonomous Business**
@@ -19,8 +19,9 @@ A multi-step research pipeline, a payment sequence, or any work that needs a hum
 - Explicit human gates (`waiting_approval`)
 - Checkpoint + resume at any step
 - Hash-chained receipts (local + optional on-chain anchor on NEAR)
-- Native support for **policy-controlled payment steps** (agentic wallet foundation)
-- Works with any agent that can call tools (NEAR AI, IronClaw, custom, Claude, etc.)
+- **Native x402 support** — agents can pay for APIs/data over HTTP 402 with stablecoins / NEAR
+- First-class payment steps ready for a policy wallet
+- Works with any agent that can call tools (NEAR AI, IronClaw, custom, Claude, …)
 
 This is the foundation for reliable agents that can safely hold and move money.
 
@@ -31,88 +32,80 @@ This is the foundation for reliable agents that can safely hold and move money.
 ```bash
 pip install -e .
 
-# Create a durable action
 nearaction create --file examples/research-digest.yaml
-
-# List actions
 nearaction list
-
-# Resume / get current step
 nearaction resume <action_id>
-
-# Record result & advance (or approve human gate)
 nearaction approve <action_id> --note "looks good"
-
-# Full audit trail
 nearaction history <action_id>
 ```
 
-The same capabilities are exposed as tools an agent can call:
+### Agent tools
 
-- `nearaction_create`
-- `nearaction_list`
-- `nearaction_status`
-- `nearaction_resume`
-- `nearaction_approve`
-- `nearaction_cancel`
-- `nearaction_history`
-- `nearaction_anchor` (push receipt root to NEAR)
+- `nearaction_create` / `list` / `status` / `resume` / `approve` / `cancel` / `history`
+- `nearaction_anchor` — prepare receipt root for NEAR
+- `nearaction_x402_challenge` — record an HTTP 402 and build a payment intent
+- `nearaction_x402_confirm` — mark payment fulfilled and advance
+- `nearaction_add_x402_step` — append a paid API step to a live action
 
 ---
 
-## Example workflow (with payment step)
+## x402 payments (agent micropayments)
+
+[x402](https://x402.org) revives HTTP **402 Payment Required** so an agent can pay for a resource inside the request itself — no accounts, no API keys, no human checkout form.
+
+NearAction makes that durable:
+
+1. Step with `type: x402` and a target URL
+2. Agent hits the URL → receives 402
+3. Call `nearaction_x402_challenge(...)` → payment intent is stored + receipt emitted
+4. Human / policy approves (status becomes `waiting_approval`)
+5. Agent signs (via policy-limited NEAR key, `@x402/near`, etc.) and retries
+6. Call `nearaction_x402_confirm(...)` → step completes, chain continues
+
+Example workflow: `examples/x402-api-call.yaml`
 
 ```yaml
-title: Weekly research digest + tip
-description: Research → summarize → human review → publish → tip the source
-steps:
-  - name: gather
-    instruction: Search and collect the top relevant items from the last 7 days
-  - name: summarize
-    instruction: Write a concise bullet-point summary for each item
-  - name: human-review
-    instruction: Wait for human approval of the draft digest
-    needs_approval: true
-  - name: publish
-    instruction: Post the approved digest to the configured channel
-  - name: tip-source
-    type: payment
-    instruction: Send a small tip to the original source via NEAR Intents
-    payment:
-      amount: "0.5"
-      token: "NEAR"
-      # recipient will be filled at runtime or from allowlist
+- name: fetch-premium
+  type: x402
+  instruction: Request the premium endpoint and handle 402 via NearAction
+  x402:
+    url: "https://api.example.com/v1/premium-research"
+    method: GET
+    max_amount: "1.00"
+    preferred_network: "near:mainnet"
 ```
+
+NEAR is a first-class network in the x402 ecosystem (`@x402/near`, market.near.ai, etc.). NearAction keeps the **workflow + audit trail** durable while the actual signature stays with your policy wallet / agent runtime.
 
 ---
 
 ## Architecture (v0.1)
 
-- **Local-first storage** under `~/.nearaction/` (survives restarts)
-- JSON action documents + individual receipt files
+- Local-first storage under `~/.nearaction/`
+- JSON actions + individual receipt files
 - SHA-256 hash chain for a simple verifiable audit trail
-- Optional **on-chain anchor**: compute receipt root and submit to NEAR (or store in a named account)
-- Payment steps are first-class (`type: payment`) and designed to plug into a policy wallet later
+- Optional on-chain anchor of the receipt root
+- `type: payment` and `type: x402` steps are first-class
 - Zero telemetry, minimal dependencies
 
 ### Design principles
 
-1. **Durability first** — state must survive process death
-2. **Human gates are first-class** — not an afterthought
+1. **Durability first**
+2. **Human gates are first-class**
 3. **Auditability** — every important transition produces a receipt
-4. **Money is dangerous** — payment steps are explicit and policy-ready
+4. **Money is dangerous** — payment & x402 steps default to approval / policy
 5. **Minimal surface** — easy to understand, easy to extend
 
 ---
 
 ## Agentic Wallet foundation
 
-NearAction already models payment steps.  
-The next natural layer (already stubbed) is a **policy wallet**:
+NearAction already models payment and x402 steps.  
+The next layer is a **policy wallet**:
 
 - Human sets spending limits, allowlists, velocity rules
 - Agent only receives a tightly scoped function-call key
-- Every payment goes through the same durable + receipt machinery
+- Every payment (Intents or x402) goes through the same durable + receipt machinery
 
 This keeps the agent powerful but unable to drain funds.
 
@@ -126,10 +119,12 @@ cd nearaction
 pip install -e .
 ```
 
-Optional (for real NEAR anchoring later):
+Optional later:
 
 ```bash
-pip install near-api-py   # or your preferred NEAR Python client
+# real x402 client libraries
+pip install "x402[httpx]"          # official Python SDK
+# or use @x402/near / uvd-x402-sdk from your agent runtime
 ```
 
 ---
@@ -140,20 +135,19 @@ pip install near-api-py   # or your preferred NEAR Python client
 2. `pip install -e .`
 3. Run the demo flow in `DEMO.md`
 4. Inspect `~/.nearaction/actions/` and the receipt chain
-5. See how a `type: payment` step is modeled (ready for Intents / policy wallet)
-
-README + DEMO + clear “do X, see Y” steps are provided.
+5. Open `examples/x402-api-call.yaml` to see how agentic micropayments are modeled
 
 ---
 
-## Roadmap (post-hackathon)
+## Roadmap
 
-- [ ] Full policy wallet contract (function-call key + on-chain limits)
-- [ ] Native NEAR Intents execution inside payment steps
-- [ ] On-chain action state (for multi-agent / public audit)
-- [ ] DAG / parallel steps
-- [ ] Time-based triggers
-- [ ] Signed receipts with NEAR keys
+- [x] Durable actions + human gates + receipts
+- [x] On-chain anchor preparation
+- [x] x402 challenge / confirm tools
+- [ ] Full policy wallet contract (function-call key + limits)
+- [ ] Live `@x402/near` / official `x402` Python signing helpers
+- [ ] Direct NEAR Intents execution inside payment steps
+- [ ] On-chain action state for multi-agent coordination
 
 ---
 
@@ -164,4 +158,4 @@ MIT
 ---
 
 Built for NEAR HACKATHON 2026.  
-Durable agents. Safe money. Verifiable work.
+Durable agents. Safe money. Verifiable work. x402-ready.

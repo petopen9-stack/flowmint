@@ -13,7 +13,12 @@ from .core import (
     get_receipt_chain,
     compute_root_hash,
 )
-from .storage import data_dir
+from .x402 import (
+    parse_402_response,
+    select_accept_option,
+    prepare_payment_intent,
+    build_x402_step,
+)
 
 
 def tool_create(
@@ -84,7 +89,6 @@ def tool_resume(action_id: str, note: str = "") -> dict:
 
     current = a["steps"][idx]
     current["status"] = "running"
-    a["updated_at"] = a.get("updated_at")  # will be refreshed on save
     from .core import _now
     a["updated_at"] = _now()
     save_action(a)
@@ -98,6 +102,7 @@ def tool_resume(action_id: str, note: str = "") -> dict:
         "step_type": current.get("type", "instruction"),
         "instruction": current["instruction"],
         "payment": current.get("payment"),
+        "x402": current.get("x402"),
         "message": "Execute this step, then call nearaction_approve with the result.",
     }
 
@@ -139,7 +144,7 @@ def tool_approve(
             append_receipt(a, "completed", {})
         else:
             next_step = a["steps"][a["current_step"]]
-            if next_step.get("needs_approval") or (a.get("require_approval") and next_step.get("type") == "payment"):
+            if next_step.get("needs_approval") or next_step.get("type") in ("payment", "x402"):
                 a["status"] = "waiting_approval"
             else:
                 a["status"] = "running"
@@ -187,30 +192,16 @@ def tool_history(action_id: str) -> dict:
 
 
 def tool_anchor(action_id: str, near_account: str | None = None) -> dict:
-    """
-    Prepare / record an on-chain anchor of the receipt root.
-    In v0.1 this stores the intent locally and returns the data
-    a user (or later the agent) can submit to NEAR.
-    """
     a = load_action(action_id)
     if not a:
         return {"ok": False, "error": f"Action {action_id} not found"}
 
     root = compute_root_hash(a)
-    anchor_payload = {
-        "action_id": action_id,
-        "root_hash": root,
-        "title": a["title"],
-        "status": a["status"],
-        "near_account": near_account,
-        "note": "Submit this root_hash to NEAR (contract or account storage) for public verifiability",
-    }
-
     a["anchor"] = {
         "root_hash": root,
         "prepared_at": a.get("updated_at"),
         "near_account": near_account,
-        "status": "prepared",  # prepared | submitted | confirmed
+        "status": "prepared",
     }
     from .core import _now
     a["updated_at"] = _now()
@@ -223,5 +214,140 @@ def tool_anchor(action_id: str, near_account: str | None = None) -> dict:
         "root_hash": root,
         "anchor": a["anchor"],
         "message": "Receipt root prepared. Submit to NEAR for on-chain verifiability.",
-        "hint": "Future versions will auto-submit via NEAR Intents or a dedicated anchor contract.",
+    }
+
+
+def tool_x402_challenge(
+    action_id: str,
+    status_code: int,
+    headers: dict | None = None,
+    body: dict | str | None = None,
+) -> dict:
+    """
+    Record a 402 challenge against the current x402 step and prepare a payment intent.
+    Call this when the agent receives HTTP 402 while executing an x402 step.
+    """
+    a = load_action(action_id)
+    if not a:
+        return {"ok": False, "error": f"Action {action_id} not found"}
+
+    idx = a["current_step"]
+    if idx >= len(a["steps"]):
+        return {"ok": False, "error": "No current step"}
+
+    step = a["steps"][idx]
+    if step.get("type") != "x402":
+        return {"ok": False, "error": "Current step is not type=x402"}
+
+    parsed = parse_402_response(status_code, headers, body)
+    if not parsed.get("ok"):
+        return parsed
+
+    x = step.setdefault("x402", {})
+    option = select_accept_option(
+        parsed.get("accepts") or [],
+        preferred_network=x.get("preferred_network"),
+        preferred_asset=x.get("preferred_asset"),
+        max_amount=x.get("max_amount"),
+    )
+    if not option:
+        return {"ok": False, "error": "No acceptable payment option in 402 response"}
+
+    intent = prepare_payment_intent(parsed, option, payer_account=a.get("meta", {}).get("payer"))
+    x["status"] = "challenged"
+    x["challenge"] = parsed
+    x["payment_payload"] = intent
+    step["needs_approval"] = True
+
+    from .core import _now
+    a["updated_at"] = _now()
+    a["status"] = "waiting_approval"
+    append_receipt(a, "x402_challenged", {
+        "url": x.get("url"),
+        "amount": option.get("amount"),
+        "network": option.get("network"),
+        "pay_to": option.get("pay_to"),
+    })
+    save_action(a)
+
+    return {
+        "ok": True,
+        "action_id": action_id,
+        "status": a["status"],
+        "x402_status": "challenged",
+        "payment_intent": intent,
+        "message": (
+            "402 challenge recorded. Review the payment_intent, sign it with a policy-limited key, "
+            "then call nearaction_x402_confirm after the paid request succeeds."
+        ),
+    }
+
+
+def tool_x402_confirm(
+    action_id: str,
+    payment_proof: dict | str | None = None,
+    response_summary: dict | None = None,
+    note: str = "",
+) -> dict:
+    """
+    Mark the current x402 step as paid + fulfilled and advance the action.
+    Call after the agent has signed, retried the request, and received the resource.
+    """
+    a = load_action(action_id)
+    if not a:
+        return {"ok": False, "error": f"Action {action_id} not found"}
+
+    idx = a["current_step"]
+    if idx >= len(a["steps"]):
+        return {"ok": False, "error": "No current step"}
+
+    step = a["steps"][idx]
+    if step.get("type") != "x402":
+        return {"ok": False, "error": "Current step is not type=x402"}
+
+    x = step.setdefault("x402", {})
+    x["status"] = "fulfilled"
+    x["result"] = {
+        "payment_proof": payment_proof,
+        "response_summary": response_summary,
+        "note": note,
+    }
+
+    # Re-use the normal approve path so the receipt chain stays consistent
+    return tool_approve(
+        action_id,
+        result={"x402": x["result"], "payment_proof": payment_proof},
+        advance=True,
+        note=note or "x402 payment fulfilled",
+    )
+
+
+def tool_add_x402_step(
+    action_id: str,
+    url: str,
+    method: str = "GET",
+    description: str = "",
+    max_amount: str | None = None,
+    preferred_network: str | None = None,
+) -> dict:
+    """Append an x402 payment step to an existing (still running) action."""
+    a = load_action(action_id)
+    if not a:
+        return {"ok": False, "error": f"Action {action_id} not found"}
+    if a["status"] in ("completed", "cancelled", "failed"):
+        return {"ok": False, "error": f"Cannot modify {a['status']} action"}
+
+    step = build_x402_step(url, method, description, max_amount, preferred_network)
+    a["steps"].append(step)
+    from .core import _now
+    a["updated_at"] = _now()
+    append_receipt(a, "x402_step_added", {"url": url, "method": method})
+    save_action(a)
+
+    return {
+        "ok": True,
+        "action_id": action_id,
+        "step_name": step["name"],
+        "total_steps": len(a["steps"]),
+        "message": f"x402 step added for {url}",
     }

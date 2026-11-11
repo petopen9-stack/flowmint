@@ -3,36 +3,37 @@
 ## Suggested flow
 
 1. **0–10s** — Hook  
-   “Most agents forget everything when they restart. NearAction keeps multi-step work (and money moves) alive.”
+   “Most agents forget everything when they restart. NearAction keeps multi-step work — and x402 payments — alive and auditable.”
 
-2. **10–25s** — Create  
+2. **10–25s** — Create (with x402 step)  
    ```bash
-   nearaction create --file examples/research-digest.yaml
+   nearaction create --file examples/x402-api-call.yaml
    ```
-   Show the new action ID.
+   Show the new action ID and the `type: x402` step.
 
-3. **25–40s** — Resume + current step  
+3. **25–45s** — Resume → 402 challenge  
    ```bash
    nearaction resume <id>
+   # (simulate receiving 402, then)
+   # agent calls nearaction_x402_challenge(...)
    nearaction status <id>
    ```
-   Highlight the current instruction.
+   Highlight `waiting_approval` + payment intent in the receipt.
 
-4. **40–55s** — Human gate  
-   Advance until `waiting_approval`, then:  
+4. **45–60s** — Approve & confirm  
    ```bash
-   nearaction approve <id> --note "approved"
-   ```
-
-5. **55–70s** — Receipt + anchor  
-   ```bash
+   nearaction approve <id> --note "policy ok"
+   # after real sign + retry:
+   # nearaction_x402_confirm(...)
    nearaction history <id>
-   nearaction anchor <id>
    ```
-   Point at the hash chain and the prepared on-chain root.
 
-6. **70–80s** — Close  
-   “Durable workflows. Human gates. Verifiable receipts. Payment steps ready for policy wallets.  
+5. **60–75s** — Receipt + anchor  
+   Show the hash chain containing `x402_challenged` → `step_completed`.
+
+6. **75–85s** — Close  
+   “Durable workflows. Human / policy gates. Verifiable receipts.  
+   Native x402 so agents can pay for APIs without accounts.  
    That’s NearAction for the agent economy on NEAR.”
 
 ---
@@ -40,16 +41,15 @@
 ## Caption for X
 
 ```
-NearAction — durable agent workflows on NEAR.
+NearAction — durable agent workflows + x402 payments on NEAR.
 
-Most agents die when the process restarts.
-NearAction keeps multi-step work alive with:
 • checkpoints & resume
-• human approval gates
+• human / policy gates
 • hash-chained receipts
-• first-class payment steps (policy wallet ready)
+• first-class x402 micropayments (HTTP 402 → sign → retry)
+• ready for policy wallets & NEAR Intents
 
 Built for #NEARHackathon
 
-Repo: https://github.com/petopen9-stack/nearaction
+https://github.com/petopen9-stack/nearaction
 ```

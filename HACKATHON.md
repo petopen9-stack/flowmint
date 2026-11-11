@@ -9,9 +9,9 @@ A lightweight but complete durable-execution layer for agents:
 
 1. Local-first durable actions with checkpoints and resume
 2. Explicit human-approval gates
-3. SHA-256 hash-chained receipts
-4. Optional on-chain anchor preparation (receipt root)
-5. First-class `type: payment` steps designed to plug into a policy wallet + NEAR Intents
+3. SHA-256 hash-chained receipts + optional NEAR anchor
+4. First-class `type: payment` steps
+5. **Native x402 support** (`nearaction_x402_challenge` / `confirm`) so agents can pay for HTTP resources under policy
 
 ## How to try it (judges)
 
@@ -20,30 +20,22 @@ git clone https://github.com/petopen9-stack/nearaction.git
 cd nearaction
 pip install -e .
 
-nearaction create --file examples/research-digest.yaml
-# note the action_id
-
+nearaction create --file examples/x402-api-call.yaml
 nearaction resume <id>
 nearaction status <id>
-nearaction approve <id> --note "demo approval"
 nearaction history <id>
-nearaction anchor <id>
 ```
 
-Expected results:
-- Action is created and stored under `~/.nearaction/actions/`
-- Status moves pending → running → waiting_approval → completed
-- Every transition has a receipt; `history` shows the chain
-- `anchor` prepares a root hash ready for NEAR submission
+Simulate a 402 by calling the tool layer with a sample challenge body (see `nearaction/x402.py` and the tools).  
+Every transition is written into the receipt chain under `~/.nearaction/`.
 
-## Why it matters for the agent economy
-Agents that can hold and move money need two things:
-1. **Durability** — the workflow itself must not vanish
+## Why it matters
+Agents that can hold and move money need:
+1. **Durability** — the workflow must not vanish
 2. **Policy control** — the agent must not be able to drain funds
+3. **Standard payment rails** — x402 is the emerging open standard for agent micropayments over HTTP
 
-NearAction delivers (1) today and is explicitly structured for (2).
+NearAction delivers (1) + (3) today and is explicitly structured for (2).
 
-## Future (already stubbed)
-- Real policy wallet contract (function-call key + limits + velocity)
-- Direct NEAR Intents execution inside payment steps
-- Full on-chain action state for multi-agent coordination
+NEAR already participates in the x402 ecosystem (`@x402/near`, market.near.ai, …).  
+This project makes those payments **durable, gated, and auditable**.

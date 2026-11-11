@@ -1,0 +1,29 @@
+title: Research + pay for premium data via x402
+description: Durable workflow that ends with an agentic x402 micropayment for an API
+require_approval: true
+tags:
+  - research
+  - x402
+  - payment
+steps:
+  - name: gather-free
+    instruction: >
+      Collect freely available sources first. Only escalate to paid data if needed.
+  - name: decide-pay
+    instruction: >
+      Decide whether a paid API call is justified. If yes, the next step will handle x402.
+    needs_approval: true
+  - name: fetch-premium
+    type: x402
+    instruction: >
+      Request the premium endpoint. If it returns HTTP 402, record the challenge,
+      get approval / policy check, sign the payment, retry, and store the result.
+    x402:
+      url: "https://api.example.com/v1/premium-research"
+      method: GET
+      max_amount: "1.00"
+      preferred_network: "near:mainnet"
+      status: pending
+  - name: synthesize
+    instruction: >
+      Merge free + paid data into a final brief and store it as the action result.
