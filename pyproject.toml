@@ -23,3 +23,6 @@ flowmint = "flowmint.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["flowmint*"]
+
+[tool.vercel]
+entrypoint = "api/index.py"
