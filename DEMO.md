@@ -1,55 +1,78 @@
-# Demo Script (≤ 90 seconds)
+# NearAction — Demo (offline, ~60–90 detik)
 
-## Suggested flow
+Tidak butuh network, testnet, atau API key. Cocok untuk rekaman & judge review.
 
-1. **0–10s** — Hook  
-   “Most agents forget everything when they restart. NearAction keeps multi-step work — and x402 payments — alive and auditable.”
+## Satu perintah
 
-2. **10–25s** — Create (with x402 step)  
-   ```bash
-   nearaction create --file examples/x402-api-call.yaml
-   ```
-   Show the new action ID and the `type: x402` step.
+```bash
+git clone https://github.com/petopen9-stack/nearaction.git
+cd nearaction
+pip install -e .
+nearaction demo
+```
 
-3. **25–45s** — Resume → 402 challenge  
-   ```bash
-   nearaction resume <id>
-   # (simulate receiving 402, then)
-   # agent calls nearaction_x402_challenge(...)
-   nearaction status <id>
-   ```
-   Highlight `waiting_approval` + payment intent in the receipt.
+Atau:
 
-4. **45–60s** — Approve & confirm  
-   ```bash
-   nearaction approve <id> --note "policy ok"
-   # after real sign + retry:
-   # nearaction_x402_confirm(...)
-   nearaction history <id>
-   ```
+```bash
+bash scripts/run_demo.sh
+```
 
-5. **60–75s** — Receipt + anchor  
-   Show the hash chain containing `x402_challenged` → `step_completed`.
+Output yang diharapkan:
+1. Action dibuat (dengan step `type: x402`)
+2. Step non-payment dijalankan + human gate di-approve
+3. **x402 challenge** (mock 402) → payment intent muncul
+4. Payment di-confirm (simulasi sign + retry)
+5. Receipt chain menampilkan `x402_challenged` → `step_completed` → `completed`
+6. Anchor root hash disiapkan untuk NEAR
 
-6. **75–85s** — Close  
-   “Durable workflows. Human / policy gates. Verifiable receipts.  
-   Native x402 so agents can pay for APIs without accounts.  
-   That’s NearAction for the agent economy on NEAR.”
+## Manual step-by-step (untuk video)
 
----
+```bash
+pip install -e .
 
-## Caption for X
+# 1. Create
+nearaction create --file examples/x402-api-call.yaml
+# catat action_id, mis. a1b2c3d4
+
+# 2. Maju sampai step x402
+nearaction resume <id>
+nearaction approve <id> --note "free sources ok"
+nearaction resume <id>
+nearaction approve <id> --note "yes, pay for premium"
+
+# 3. Simulasi 402 dari API
+nearaction resume <id>
+nearaction x402-challenge <id> --mock
+
+# 4. Policy / human approve + confirm payment
+nearaction x402-confirm <id> --note "signed with limited key" --proof '{"tx":"demo-tx"}'
+
+# 5. Selesai + audit
+nearaction status <id>
+nearaction history <id>
+nearaction anchor <id> --account youraccount.near
+```
+
+## Caption X (copy-paste)
 
 ```
-NearAction — durable agent workflows + x402 payments on NEAR.
+NearAction — durable agent workflows + x402 on NEAR.
 
-• checkpoints & resume
-• human / policy gates
+Agents that can pay need more than a wallet:
+• checkpoints that survive restarts
+• human / policy gates before money moves
 • hash-chained receipts
-• first-class x402 micropayments (HTTP 402 → sign → retry)
-• ready for policy wallets & NEAR Intents
+• native x402 (HTTP 402 → sign → retry)
 
-Built for #NEARHackathon
+Offline demo in one command:
+nearaction demo
 
-https://github.com/petopen9-stack/nearaction
+Repo: https://github.com/petopen9-stack/nearaction
+#NEARHackathon @NEARProtocol
 ```
+
+## Tips rekaman
+- Font terminal besar, tema gelap
+- Jalankan `nearaction demo` sekali full, lalu potong highlight
+- Tunjukkan baris `x402_challenged` di `history`
+- Sebut: “real signing plugs into @x402/near or a policy wallet; NearAction keeps the workflow durable and auditable”

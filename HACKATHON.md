@@ -1,41 +1,41 @@
-# NearAction — NEAR HACKATHON 2026 notes
+# NearAction — NEAR HACKATHON 2026
 
-## Track preference
-- Primary: **Agent Economy**
-- Secondary: **AI Security & Defense** / **Autonomous Business**
+## Track
+**Primary:** Agent Economy  
+**Secondary:** AI Security & Defense · Autonomous Business
 
-## What we built
-A lightweight but complete durable-execution layer for agents:
+## One-liner
+Durable agent workflows with human/policy gates, verifiable receipts, and native **x402** micropayments — so agents can pay for APIs without losing state or draining funds.
 
-1. Local-first durable actions with checkpoints and resume
-2. Explicit human-approval gates
-3. SHA-256 hash-chained receipts + optional NEAR anchor
-4. First-class `type: payment` steps
-5. **Native x402 support** (`nearaction_x402_challenge` / `confirm`) so agents can pay for HTTP resources under policy
-
-## How to try it (judges)
+## Demo for judges (no network)
 
 ```bash
 git clone https://github.com/petopen9-stack/nearaction.git
 cd nearaction
 pip install -e .
-
-nearaction create --file examples/x402-api-call.yaml
-nearaction resume <id>
-nearaction status <id>
-nearaction history <id>
+nearaction demo
 ```
 
-Simulate a 402 by calling the tool layer with a sample challenge body (see `nearaction/x402.py` and the tools).  
-Every transition is written into the receipt chain under `~/.nearaction/`.
+Expected: create → gates → x402 mock challenge → confirm → receipt chain with `x402_challenged` → anchor root.
 
-## Why it matters
-Agents that can hold and move money need:
-1. **Durability** — the workflow must not vanish
-2. **Policy control** — the agent must not be able to drain funds
-3. **Standard payment rails** — x402 is the emerging open standard for agent micropayments over HTTP
+Details: [DEMO.md](./DEMO.md)
 
-NearAction delivers (1) + (3) today and is explicitly structured for (2).
+## Ecosystem alignment ([nearbuilders.org/build](https://nearbuilders.org/build))
 
-NEAR already participates in the x402 ecosystem (`@x402/near`, market.near.ai, …).  
-This project makes those payments **durable, gated, and auditable**.
+- **Agentic Commerce / NEAR Intents** — payment steps designed to plug into Intents + Agent Connect later  
+- **x402** — first-class HTTP 402 flow; NEAR already supported in x402 ecosystem  
+- **NEAR AI** — tools/skill ready for agents running on NEAR AI Cloud / IronClaw  
+- **Security** — money steps default to `waiting_approval`; receipt chain for audit  
+
+## Submission checklist
+- [x] Public repo: https://github.com/petopen9-stack/nearaction  
+- [ ] Demo post on X (tag @NEARProtocol #NEARHackathon) — use caption in DEMO.md  
+- [ ] Submit form with repo + X post + NEAR payout address  
+- [ ] Preferred track: Agent Economy  
+
+## Do X, see Y
+
+1. `nearaction demo` → full offline flow completes  
+2. `nearaction history <id>` → see `created`, `x402_challenged`, `step_completed`, `completed`  
+3. `nearaction anchor <id>` → `root_hash` ready for NEAR  
+4. Restart shell, `nearaction status <id>` → state still there (`~/.nearaction/`)  

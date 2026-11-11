@@ -1,4 +1,4 @@
-"""Simple CLI for NearAction."""
+"""Simple CLI for NearAction — fully demoable offline."""
 
 from __future__ import annotations
 
@@ -10,59 +10,62 @@ from pathlib import Path
 import yaml
 
 from . import tools
-from .core import load_action
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="nearaction", description="Durable agent workflows on NEAR")
+    parser = argparse.ArgumentParser(prog="nearaction", description="Durable agent workflows on NEAR + x402")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    # create
     p_create = sub.add_parser("create", help="Create a durable action from a YAML file")
-    p_create.add_argument("--file", "-f", required=True, help="Path to workflow YAML")
+    p_create.add_argument("--file", "-f", required=True)
 
-    # list
     p_list = sub.add_parser("list", help="List actions")
-    p_list.add_argument("--status", help="Filter by status")
+    p_list.add_argument("--status", default=None)
 
-    # status
     p_status = sub.add_parser("status", help="Show action status")
     p_status.add_argument("action_id")
 
-    # resume
     p_resume = sub.add_parser("resume", help="Resume / get current step")
     p_resume.add_argument("action_id")
     p_resume.add_argument("--note", default="")
 
-    # approve
     p_approve = sub.add_parser("approve", help="Record step result and advance")
     p_approve.add_argument("action_id")
     p_approve.add_argument("--note", default="")
-    p_approve.add_argument("--result", default=None, help="Optional JSON result")
+    p_approve.add_argument("--result", default=None)
 
-    # cancel
     p_cancel = sub.add_parser("cancel", help="Cancel an action")
     p_cancel.add_argument("action_id")
     p_cancel.add_argument("--reason", default="")
 
-    # history
     p_hist = sub.add_parser("history", help="Show receipt chain")
     p_hist.add_argument("action_id")
 
-    # anchor
     p_anchor = sub.add_parser("anchor", help="Prepare on-chain receipt root")
     p_anchor.add_argument("action_id")
-    p_anchor.add_argument("--account", help="NEAR account that will hold the anchor")
+    p_anchor.add_argument("--account", default=None)
+
+    # x402
+    p_x402c = sub.add_parser("x402-challenge", help="Record a 402 challenge (use --mock for offline demo)")
+    p_x402c.add_argument("action_id")
+    p_x402c.add_argument("--mock", action="store_true", help="Use built-in mock 402 payload")
+    p_x402c.add_argument("--body", default=None, help="Path to JSON body of real 402 response")
+
+    p_x402f = sub.add_parser("x402-confirm", help="Confirm x402 payment fulfilled and advance")
+    p_x402f.add_argument("action_id")
+    p_x402f.add_argument("--note", default="payment fulfilled (demo)")
+    p_x402f.add_argument("--proof", default=None, help="Optional payment proof string/JSON")
+
+    p_demo = sub.add_parser("demo", help="Run the full offline demo end-to-end")
 
     args = parser.parse_args(argv)
 
     if args.cmd == "create":
         path = Path(args.file)
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        steps = data.get("steps", [])
         res = tools.tool_create(
             title=data.get("title", path.stem),
-            steps=steps,
+            steps=data.get("steps", []),
             description=data.get("description", ""),
             require_approval=data.get("require_approval", True),
             tags=data.get("tags"),
@@ -71,8 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if res.get("ok") else 1
 
     if args.cmd == "list":
-        res = tools.tool_list(status=args.status)
-        print(json.dumps(res, indent=2))
+        print(json.dumps(tools.tool_list(status=args.status), indent=2))
         return 0
 
     if args.cmd == "status":
@@ -86,9 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if res.get("ok") else 1
 
     if args.cmd == "approve":
-        result = None
-        if args.result:
-            result = json.loads(args.result)
+        result = json.loads(args.result) if args.result else None
         res = tools.tool_approve(args.action_id, result=result, note=args.note)
         print(json.dumps(res, indent=2))
         return 0 if res.get("ok") else 1
@@ -108,7 +108,160 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(res, indent=2))
         return 0 if res.get("ok") else 1
 
+    if args.cmd == "x402-challenge":
+        if args.mock:
+            body = {
+                "x402Version": 2,
+                "accepts": [{
+                    "scheme": "exact",
+                    "network": "near:mainnet",
+                    "asset": "usdc.near",
+                    "amount": "2500000",
+                    "payTo": "merchant.near",
+                    "maxTimeoutSeconds": 600,
+                }],
+            }
+            headers = {"payment-required": "mock"}
+        elif args.body:
+            body = json.loads(Path(args.body).read_text(encoding="utf-8"))
+            headers = {}
+        else:
+            print("Provide --mock or --body <file.json>", file=sys.stderr)
+            return 1
+        res = tools.tool_x402_challenge(args.action_id, status_code=402, headers=headers, body=body)
+        print(json.dumps(res, indent=2))
+        return 0 if res.get("ok") else 1
+
+    if args.cmd == "x402-confirm":
+        proof = args.proof
+        if proof and proof.startswith("{"):
+            proof = json.loads(proof)
+        res = tools.tool_x402_confirm(args.action_id, payment_proof=proof, note=args.note)
+        print(json.dumps(res, indent=2))
+        return 0 if res.get("ok") else 1
+
+    if args.cmd == "demo":
+        return _run_demo()
+
     return 1
+
+
+def _run_demo() -> int:
+    """Full offline walkthrough — no network required."""
+    print("=== NearAction offline demo ===\n")
+
+    # 1. Create from example
+    example = Path(__file__).resolve().parent.parent / "examples" / "x402-api-call.yaml"
+    if not example.exists():
+        # fallback minimal steps
+        steps = [
+            {"name": "gather", "instruction": "Collect free sources"},
+            {"name": "decide", "instruction": "Decide to pay", "needs_approval": True},
+            {
+                "name": "fetch-premium",
+                "type": "x402",
+                "instruction": "Pay via x402 for premium data",
+                "x402": {
+                    "url": "https://api.example.com/v1/premium-research",
+                    "method": "GET",
+                    "max_amount": "1.00",
+                    "preferred_network": "near:mainnet",
+                    "status": "pending",
+                },
+            },
+            {"name": "synthesize", "instruction": "Write final brief"},
+        ]
+        res = tools.tool_create("Demo research + x402", steps, require_approval=True, tags=["demo"])
+    else:
+        data = yaml.safe_load(example.read_text(encoding="utf-8"))
+        res = tools.tool_create(
+            title=data.get("title", "demo"),
+            steps=data.get("steps", []),
+            description=data.get("description", ""),
+            require_approval=True,
+            tags=["demo"],
+        )
+
+    if not res.get("ok"):
+        print(json.dumps(res, indent=2))
+        return 1
+
+    aid = res["action_id"]
+    print(f"1. Created action: {aid}\n")
+
+    # 2. Resume first steps until x402
+    while True:
+        st = tools.tool_status(aid)
+        cur = st.get("current") or {}
+        print(f"   status={st['status']} step={st['current_step']} type={cur.get('type', 'instruction')} name={cur.get('name')}")
+
+        if cur.get("type") == "x402":
+            print("\n2. Hit x402 step — simulating HTTP 402 challenge...\n")
+            break
+
+        if st["status"] == "waiting_approval":
+            print("   → approving human gate")
+            tools.tool_approve(aid, note="demo approval")
+        else:
+            tools.tool_resume(aid)
+            tools.tool_approve(aid, result={"demo": True}, note="step done")
+
+    # 3. x402 challenge (mock)
+    ch = tools.tool_x402_challenge(
+        aid,
+        status_code=402,
+        headers={"payment-required": "mock"},
+        body={
+            "x402Version": 2,
+            "accepts": [{
+                "scheme": "exact",
+                "network": "near:mainnet",
+                "asset": "usdc.near",
+                "amount": "2500000",
+                "payTo": "merchant.near",
+                "maxTimeoutSeconds": 600,
+            }],
+        },
+    )
+    print("3. x402 challenge recorded:")
+    print(f"   payment_intent amount={ch.get('payment_intent', {}).get('amount')} network={ch.get('payment_intent', {}).get('network')}")
+    print(f"   status → {ch.get('status')}\n")
+
+    # 4. Approve payment (policy / human)
+    print("4. Approving payment (policy gate)...")
+    # status is waiting_approval; we confirm after "signing"
+    conf = tools.tool_x402_confirm(
+        aid,
+        payment_proof={"demo": True, "tx": "mock-near-x402-tx-hash"},
+        response_summary={"status": 200, "bytes": 4096},
+        note="demo: signed with policy-limited key + retry succeeded",
+    )
+    print(f"   → {conf.get('message')}\n")
+
+    # 5. Finish remaining steps
+    while True:
+        st = tools.tool_status(aid)
+        if st["status"] == "completed":
+            break
+        if st["status"] == "waiting_approval":
+            tools.tool_approve(aid, note="final approval")
+        else:
+            tools.tool_resume(aid)
+            tools.tool_approve(aid, result={"demo": True}, note="done")
+
+    # 6. History + anchor
+    hist = tools.tool_history(aid)
+    print("5. Receipt chain events:")
+    for r in hist.get("receipts", []):
+        print(f"   - {r.get('event')}  hash={r.get('hash', '')[:12]}…")
+
+    anc = tools.tool_anchor(aid, near_account="demo.near")
+    print(f"\n6. Anchor prepared: root={anc.get('root_hash', '')[:16]}…")
+    print("\n=== Demo complete. Action is durable, gated, paid (x402), and auditable. ===")
+    print(f"Action id: {aid}")
+    print("Inspect: nearaction status", aid)
+    print("         nearaction history", aid)
+    return 0
 
 
 if __name__ == "__main__":
