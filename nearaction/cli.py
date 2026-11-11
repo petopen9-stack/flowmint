@@ -45,7 +45,6 @@ def main(argv: list[str] | None = None) -> int:
     p_anchor.add_argument("action_id")
     p_anchor.add_argument("--account", default=None)
 
-    # x402
     p_x402c = sub.add_parser("x402-challenge", help="Record a 402 challenge (use --mock for offline demo)")
     p_x402c.add_argument("action_id")
     p_x402c.add_argument("--mock", action="store_true", help="Use built-in mock 402 payload")
@@ -147,37 +146,38 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_demo() -> int:
-    """Full offline walkthrough — no network required."""
     print("=== NearAction offline demo ===\n")
 
-    # 1. Create from example
     example = Path(__file__).resolve().parent.parent / "examples" / "x402-api-call.yaml"
-    if not example.exists():
-        # fallback minimal steps
-        steps = [
-            {"name": "gather", "instruction": "Collect free sources"},
-            {"name": "decide", "instruction": "Decide to pay", "needs_approval": True},
-            {
-                "name": "fetch-premium",
-                "type": "x402",
-                "instruction": "Pay via x402 for premium data",
-                "x402": {
-                    "url": "https://api.example.com/v1/premium-research",
-                    "method": "GET",
-                    "max_amount": "1.00",
-                    "preferred_network": "near:mainnet",
-                    "status": "pending",
-                },
-            },
-            {"name": "synthesize", "instruction": "Write final brief"},
-        ]
-        res = tools.tool_create("Demo research + x402", steps, require_approval=True, tags=["demo"])
-    else:
+    if example.exists():
         data = yaml.safe_load(example.read_text(encoding="utf-8"))
         res = tools.tool_create(
             title=data.get("title", "demo"),
             steps=data.get("steps", []),
             description=data.get("description", ""),
+            require_approval=True,
+            tags=["demo"],
+        )
+    else:
+        res = tools.tool_create(
+            "Demo research + x402",
+            [
+                {"name": "gather", "instruction": "Collect free sources"},
+                {"name": "decide", "instruction": "Decide to pay", "needs_approval": True},
+                {
+                    "name": "fetch-premium",
+                    "type": "x402",
+                    "instruction": "Pay via x402 for premium data",
+                    "x402": {
+                        "url": "https://api.example.com/v1/premium-research",
+                        "method": "GET",
+                        "max_amount": "5.00",
+                        "preferred_network": "near:mainnet",
+                        "status": "pending",
+                    },
+                },
+                {"name": "synthesize", "instruction": "Write final brief"},
+            ],
             require_approval=True,
             tags=["demo"],
         )
@@ -189,24 +189,25 @@ def _run_demo() -> int:
     aid = res["action_id"]
     print(f"1. Created action: {aid}\n")
 
-    # 2. Resume first steps until x402
-    while True:
+    # Advance until current step is x402
+    for _ in range(20):
         st = tools.tool_status(aid)
         cur = st.get("current") or {}
         print(f"   status={st['status']} step={st['current_step']} type={cur.get('type', 'instruction')} name={cur.get('name')}")
 
         if cur.get("type") == "x402":
+            tools.tool_resume(aid)  # mark running
             print("\n2. Hit x402 step — simulating HTTP 402 challenge...\n")
             break
 
         if st["status"] == "waiting_approval":
-            print("   → approving human gate")
             tools.tool_approve(aid, note="demo approval")
-        else:
+        elif st["status"] in ("pending", "running"):
             tools.tool_resume(aid)
             tools.tool_approve(aid, result={"demo": True}, note="step done")
+        else:
+            break
 
-    # 3. x402 challenge (mock)
     ch = tools.tool_x402_challenge(
         aid,
         status_code=402,
@@ -223,13 +224,16 @@ def _run_demo() -> int:
             }],
         },
     )
+    if not ch.get("ok"):
+        print("Challenge failed:", json.dumps(ch, indent=2))
+        return 1
+
+    intent = ch.get("payment_intent") or {}
     print("3. x402 challenge recorded:")
-    print(f"   payment_intent amount={ch.get('payment_intent', {}).get('amount')} network={ch.get('payment_intent', {}).get('network')}")
+    print(f"   amount={intent.get('amount')} network={intent.get('network')} pay_to={intent.get('pay_to')}")
     print(f"   status → {ch.get('status')}\n")
 
-    # 4. Approve payment (policy / human)
-    print("4. Approving payment (policy gate)...")
-    # status is waiting_approval; we confirm after "signing"
+    print("4. Approving payment (policy gate) + confirming...")
     conf = tools.tool_x402_confirm(
         aid,
         payment_proof={"demo": True, "tx": "mock-near-x402-tx-hash"},
@@ -238,8 +242,7 @@ def _run_demo() -> int:
     )
     print(f"   → {conf.get('message')}\n")
 
-    # 5. Finish remaining steps
-    while True:
+    for _ in range(10):
         st = tools.tool_status(aid)
         if st["status"] == "completed":
             break
@@ -249,14 +252,13 @@ def _run_demo() -> int:
             tools.tool_resume(aid)
             tools.tool_approve(aid, result={"demo": True}, note="done")
 
-    # 6. History + anchor
     hist = tools.tool_history(aid)
     print("5. Receipt chain events:")
     for r in hist.get("receipts", []):
-        print(f"   - {r.get('event')}  hash={r.get('hash', '')[:12]}…")
+        print(f"   - {r.get('event')}  hash={str(r.get('hash', ''))[:12]}…")
 
     anc = tools.tool_anchor(aid, near_account="demo.near")
-    print(f"\n6. Anchor prepared: root={anc.get('root_hash', '')[:16]}…")
+    print(f"\n6. Anchor prepared: root={str(anc.get('root_hash', ''))[:16]}…")
     print("\n=== Demo complete. Action is durable, gated, paid (x402), and auditable. ===")
     print(f"Action id: {aid}")
     print("Inspect: nearaction status", aid)

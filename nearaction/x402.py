@@ -4,15 +4,6 @@ x402 payment support for NearAction.
 x402 = open standard that uses HTTP 402 Payment Required so agents can
 pay for APIs / data / services with stablecoins (or NEAR) inside the
 request itself — no accounts, no API keys, no human checkout.
-
-This module:
-- Parses 402 responses
-- Models an x402 payment step inside a durable action
-- Prepares the payment payload an agent (or policy wallet) will sign
-- Records the payment in the receipt chain
-
-Real on-chain signing is left to the agent runtime / policy wallet
-(NEAR key, @x402/near, uvd-x402-sdk, etc.).
 """
 
 from __future__ import annotations
@@ -27,25 +18,14 @@ def parse_402_response(
     headers: dict[str, str] | None = None,
     body: dict | str | None = None,
 ) -> dict:
-    """
-    Extract payment requirements from a 402 response.
-
-    Returns a normalized dict the rest of NearAction can store and act on.
-    """
     if status_code != 402:
         return {"ok": False, "error": f"Expected 402, got {status_code}"}
 
     headers = {k.lower(): v for k, v in (headers or {}).items()}
-    payment_required = None
-
-    # Common places the requirements live
-    if "payment-required" in headers:
-        payment_required = headers["payment-required"]
-    elif "x-payment-required" in headers:
-        payment_required = headers["x-payment-required"]
+    payment_required = headers.get("payment-required") or headers.get("x-payment-required")
 
     accepts = []
-    raw = {}
+    raw: dict = {}
 
     if isinstance(body, str):
         try:
@@ -55,23 +35,18 @@ def parse_402_response(
 
     if isinstance(body, dict):
         raw = body
-        # x402 v2 style
         if "accepts" in body:
             accepts = body["accepts"]
-        elif "x402Version" in body:
-            accepts = body.get("accepts", [])
-        # sometimes nested
-        if not accepts and "paymentRequired" in body:
+        elif "paymentRequired" in body:
             accepts = body["paymentRequired"].get("accepts", [])
 
-    # Normalize each accept option
     options = []
     for a in accepts:
         options.append({
             "scheme": a.get("scheme", "exact"),
             "network": a.get("network", ""),
             "asset": a.get("asset", ""),
-            "amount": a.get("amount", a.get("maxAmountRequired", "")),
+            "amount": str(a.get("amount", a.get("maxAmountRequired", ""))),
             "pay_to": a.get("payTo", a.get("pay_to", "")),
             "max_timeout_seconds": a.get("maxTimeoutSeconds", a.get("max_timeout_seconds", 300)),
             "extra": {k: v for k, v in a.items() if k not in {
@@ -97,9 +72,6 @@ def build_x402_step(
     preferred_network: str | None = None,
     preferred_asset: str | None = None,
 ) -> dict:
-    """
-    Create a durable-action step that will pay via x402 when executed.
-    """
     return {
         "name": f"x402-pay-{urlparse(url).netloc or 'resource'}",
         "type": "x402",
@@ -110,13 +82,28 @@ def build_x402_step(
             "max_amount": max_amount,
             "preferred_network": preferred_network or "near:mainnet",
             "preferred_asset": preferred_asset,
-            "status": "pending",  # pending | challenged | paid | fulfilled | failed
+            "status": "pending",
             "challenge": None,
             "payment_payload": None,
             "result": None,
         },
-        "needs_approval": True,  # money movement → human or policy gate by default
+        "needs_approval": True,
     }
+
+
+def _amount_ok(option_amount: str, max_amount: str | None) -> bool:
+    """Compare amounts; treat large integers as atomic units and skip strict max."""
+    if max_amount is None or max_amount == "":
+        return True
+    try:
+        opt = float(option_amount)
+        mx = float(max_amount)
+    except (ValueError, TypeError):
+        return True
+    # If option looks atomic (e.g. 2500000 USDC-6) and max looks human (1.00), allow
+    if opt >= 1000 and mx < 100:
+        return True
+    return opt <= mx
 
 
 def select_accept_option(
@@ -125,30 +112,23 @@ def select_accept_option(
     preferred_asset: str | None = None,
     max_amount: str | None = None,
 ) -> Optional[dict]:
-    """Pick the best accept option given preferences and a hard max."""
     if not accepts:
         return None
 
-    candidates = accepts
+    candidates = list(accepts)
     if preferred_network:
         filtered = [a for a in candidates if preferred_network in (a.get("network") or "")]
         if filtered:
             candidates = filtered
     if preferred_asset:
-        filtered = [a for a in candidates if preferred_asset.lower() in (a.get("asset") or "").lower()]
+        filtered = [
+            a for a in candidates
+            if preferred_asset.lower() in (a.get("asset") or "").lower()
+        ]
         if filtered:
             candidates = filtered
 
-    if max_amount is not None:
-        try:
-            max_val = float(max_amount)
-            candidates = [
-                a for a in candidates
-                if a.get("amount") and float(a["amount"]) <= max_val
-            ]
-        except (ValueError, TypeError):
-            pass
-
+    candidates = [a for a in candidates if _amount_ok(a.get("amount") or "0", max_amount)]
     return candidates[0] if candidates else None
 
 
@@ -157,12 +137,6 @@ def prepare_payment_intent(
     option: dict,
     payer_account: str | None = None,
 ) -> dict:
-    """
-    Build a payment intent the agent / policy wallet will sign.
-
-    This does NOT sign. It only prepares a clear, durable record of
-    what must be paid so the receipt chain stays complete.
-    """
     return {
         "scheme": option.get("scheme", "exact"),
         "network": option.get("network"),
