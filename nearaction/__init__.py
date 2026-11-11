@@ -2,8 +2,8 @@
 NearAction — Durable agent workflows on NEAR
 
 Durable, resumable, checkpointed actions with human-approval gates,
-verifiable hash-chained receipts, and first-class payment steps
-(ready for policy wallets & NEAR Intents).
+verifiable hash-chained receipts, x402 micropayments, and policy-ready
+payment steps.
 """
 
 from .core import (
@@ -23,9 +23,12 @@ from .tools import (
     tool_cancel,
     tool_history,
     tool_anchor,
+    tool_x402_challenge,
+    tool_x402_confirm,
+    tool_add_x402_step,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = [
     "create_action",
     "load_action",
@@ -41,4 +44,7 @@ __all__ = [
     "tool_cancel",
     "tool_history",
     "tool_anchor",
+    "tool_x402_challenge",
+    "tool_x402_confirm",
+    "tool_add_x402_step",
 ]
