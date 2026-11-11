@@ -28,6 +28,7 @@ Details: [DEMO.md](./DEMO.md)
 - **x402** — first-class HTTP 402 flow; NEAR already supported in x402 ecosystem
 - **NEAR AI** — tools/skill ready for agents running on NEAR AI Cloud / IronClaw
 - **Security** — deterministic allow/warn/block policy, prompt-injection defense, and receipt chain for audit
+- **Live settlement path** — optional PingPay x402 v2 quote/settle adapter; private keys stay outside FlowMint
 
 ## Submission checklist
 - [x] Public repo: https://github.com/petopen9-stack/flowmint
@@ -42,3 +43,4 @@ Details: [DEMO.md](./DEMO.md)
 3. `flowmint anchor <id>` → `root_hash` ready for NEAR
 4. Restart shell, `flowmint status <id>` → state still there (`~/.flowmint/`)
 5. `flowmint security-demo` → malicious recipient blocked; funds sent: `0`
+6. `flowmint facilitator-supported` → verify the live x402 facilitator capabilities

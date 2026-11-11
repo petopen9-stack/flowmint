@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 
 from . import tools
+from .facilitator import load_payment_requirements, ping_quote, ping_settle, ping_supported
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,6 +58,16 @@ def main(argv: list[str] | None = None) -> int:
 
     p_demo = sub.add_parser("demo", help="Run the full offline demo end-to-end")
     p_security = sub.add_parser("security-demo", help="Show a prompt-injection payment blocked by policy")
+
+    sub.add_parser("facilitator-supported", help="Check PingPay x402 facilitator capabilities")
+    p_quote = sub.add_parser("x402-quote", help="Request a PingPay x402 quote after policy approval")
+    p_quote.add_argument("--body", required=True, help="Path to the JSON body from an HTTP 402")
+    p_quote.add_argument("--refund-to", required=True, help="Origin-chain refund address")
+    p_settle = sub.add_parser("x402-settle", help="Report an already-sent origin payment to PingPay")
+    p_settle.add_argument("--body", required=True, help="Path to the JSON body from an HTTP 402")
+    p_settle.add_argument("--operation-token", required=True)
+    p_settle.add_argument("--deposit-address", required=True)
+    p_settle.add_argument("--tx-hash", required=True)
 
     args = parser.parse_args(argv)
 
@@ -146,6 +157,30 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "security-demo":
         return _run_security_demo()
+
+    if args.cmd == "facilitator-supported":
+        print(json.dumps(ping_supported(), indent=2))
+        return 0
+
+    if args.cmd == "x402-quote":
+        try:
+            requirements = load_payment_requirements(args.body)
+            result = ping_quote(requirements, args.refund_to)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
+            return 1
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok") else 1
+
+    if args.cmd == "x402-settle":
+        try:
+            requirements = load_payment_requirements(args.body)
+            result = ping_settle(requirements, args.operation_token, args.deposit_address, args.tx_hash)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
+            return 1
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok") else 1
 
     return 1
 

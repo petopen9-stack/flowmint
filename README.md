@@ -75,6 +75,7 @@ flowmint history <id>
 flowmint anchor <id> --account you.near
 flowmint demo                            # full walkthrough
 flowmint security-demo                   # block a malicious payment
+flowmint facilitator-supported            # live PingPay capability check
 ```
 
 ---
@@ -133,6 +134,27 @@ payment is checked before signing. A rejected payment pauses the action and
 adds a `security_blocked` receipt with the reasons; a payment requiring human
 review is recorded as `warn` and remains gated.
 
+### Live x402 / NEAR settlement adapter
+
+FlowMint includes an optional PingPay facilitator adapter for the official
+x402 v2 `quote` → origin-chain payment → `settle` flow. It never stores a
+private key or submits an origin-chain transaction. Configure credentials only
+through environment variables:
+
+```bash
+export FLOWMINT_PING_API_KEY="..."              # never commit this
+export FLOWMINT_PING_FACILITATOR_URL="https://pay.pingpay.io/agentpay/x402"
+flowmint facilitator-supported
+flowmint x402-quote --body response-402.json --refund-to 0xYourRefundAddress
+# send the quoted amount with your wallet, then:
+flowmint x402-settle --body response-402.json \
+  --operation-token "..." --deposit-address "0x..." --tx-hash "0x..."
+```
+
+The policy check must pass before `x402-quote`; the wallet or managed Agent API
+performs the actual origin-chain payment. Settlement returns the NEAR Intents
+transaction reference and can be attached to the FlowMint receipt.
+
 ---
 
 ## Architecture
@@ -149,6 +171,7 @@ review is recorded as `warn` and remains gated.
 - [x] Durable core + human gates + receipts  
 - [x] x402 challenge/confirm + offline demo  
 - [x] Deterministic payment policy + prompt-injection block demo
+- [x] PingPay x402 v2 quote/settle adapter (keyless transaction submission)
 - [ ] Live `@x402/near` / official `x402` Python signing helper  
 - [ ] Policy wallet contract (function-call key + limits)  
 - [ ] NEAR Intents inside payment steps  

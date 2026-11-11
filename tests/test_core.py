@@ -2,6 +2,7 @@
 
 from flowmint import tools
 from flowmint.policy import evaluate_payment
+from flowmint.facilitator import load_payment_requirements, ping_quote
 from flowmint.x402 import parse_402_response, select_accept_option, prepare_payment_intent
 
 
@@ -139,3 +140,14 @@ def test_policy_decision_is_receipted():
     assert tools.tool_status(aid)["status"] == "paused"
     events = [r["event"] for r in tools.tool_history(aid)["receipts"]]
     assert "security_blocked" in events
+
+
+def test_facilitator_requires_key_before_network_call(tmp_path, monkeypatch):
+    monkeypatch.delenv("FLOWMINT_PING_API_KEY", raising=False)
+    body = tmp_path / "402.json"
+    body.write_text('{"accepts": [{"scheme": "exact", "network": "base", "amount": "1"}]}')
+    requirements = load_payment_requirements(str(body))
+    assert requirements["network"] == "base"
+    result = ping_quote(requirements, "0xrefund", api_key=None)
+    assert result["ok"] is False
+    assert "FLOWMINT_PING_API_KEY" in result["error"]
