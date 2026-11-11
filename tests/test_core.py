@@ -1,6 +1,7 @@
 """Minimal tests — run with: python -m pytest tests/ -q"""
 
 from flowmint import tools
+from flowmint.policy import evaluate_payment
 from flowmint.x402 import parse_402_response, select_accept_option, prepare_payment_intent
 
 
@@ -101,3 +102,40 @@ def test_parse_402():
     assert opt is not None
     intent = prepare_payment_intent(parsed, opt, payer_account="agent.near")
     assert intent["payer"] == "agent.near"
+
+
+def test_policy_blocks_injected_payment():
+    decision = evaluate_payment(
+        {
+            "max_per_payment_atomic": "1000000",
+            "allowed_recipients": ["merchant.near"],
+            "allowed_networks": ["near:mainnet"],
+        },
+        {"amount": "9000000", "pay_to": "attacker.near", "network": "near:mainnet"},
+    )
+    assert decision["decision"] == "block"
+    assert any("not in allowed_recipients" in reason for reason in decision["reasons"])
+
+
+def test_policy_warns_above_approval_threshold():
+    decision = evaluate_payment(
+        {"allowed_recipients": ["merchant.near"], "require_approval_above_atomic": "500"},
+        {"amount": "750", "pay_to": "merchant.near", "network": "near:mainnet"},
+    )
+    assert decision["decision"] == "warn"
+
+
+def test_policy_decision_is_receipted():
+    res = tools.tool_create(
+        title="policy receipt",
+        steps=[{"name": "pay", "instruction": "pay safely"}],
+        policy={"allowed_recipients": ["merchant.near"]},
+    )
+    aid = res["action_id"]
+    checked = tools.tool_check_payment_policy(
+        aid, {"amount": "1", "pay_to": "attacker.near", "network": "near:mainnet"}
+    )
+    assert checked["decision"] == "block"
+    assert tools.tool_status(aid)["status"] == "paused"
+    events = [r["event"] for r in tools.tool_history(aid)["receipts"]]
+    assert "security_blocked" in events

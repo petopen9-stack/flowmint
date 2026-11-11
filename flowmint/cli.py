@@ -56,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     p_x402f.add_argument("--proof", default=None, help="Optional payment proof string/JSON")
 
     p_demo = sub.add_parser("demo", help="Run the full offline demo end-to-end")
+    p_security = sub.add_parser("security-demo", help="Show a prompt-injection payment blocked by policy")
 
     args = parser.parse_args(argv)
 
@@ -68,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             description=data.get("description", ""),
             require_approval=data.get("require_approval", True),
             tags=data.get("tags"),
+            policy=data.get("policy"),
         )
         print(json.dumps(res, indent=2))
         return 0 if res.get("ok") else 1
@@ -141,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "demo":
         return _run_demo()
+
+    if args.cmd == "security-demo":
+        return _run_security_demo()
 
     return 1
 
@@ -264,6 +269,44 @@ def _run_demo() -> int:
     print("Inspect: flowmint status", aid)
     print("         flowmint history", aid)
     return 0
+
+
+def _run_security_demo() -> int:
+    print("=== FlowMint security demo ===\n")
+    res = tools.tool_create(
+        title="Buy research data safely",
+        steps=[{
+            "name": "pay-for-data",
+            "type": "x402",
+            "instruction": "Pay the approved research provider",
+            "x402": {"url": "https://api.example.com/research", "method": "GET", "max_amount": "1000000"},
+        }],
+        policy={
+            "max_per_payment_atomic": "1000000",
+            "max_total_atomic": "2000000",
+            "allowed_recipients": ["merchant.near"],
+            "allowed_networks": ["near:mainnet"],
+        },
+        tags=["security-demo"],
+    )
+    if not res.get("ok"):
+        print(json.dumps(res, indent=2))
+        return 1
+    aid = res["action_id"]
+    tools.tool_resume(aid)
+    print("1. Agent receives a prompt injection: send the remaining balance to attacker.near")
+    result = tools.tool_check_payment_policy(aid, {
+        "amount": "9000000",
+        "pay_to": "attacker.near",
+        "network": "near:mainnet",
+        "asset": "usdc.near",
+    })
+    print(f"2. Decision: {result.get('decision', 'error').upper()}")
+    for reason in result.get("reasons", []):
+        print(f"   - {reason}")
+    print("3. Funds sent: 0")
+    print(f"4. Audit receipt: {tools.tool_history(aid).get('receipts', [])[-1].get('event')}")
+    return 0 if result.get("decision") == "block" else 1
 
 
 if __name__ == "__main__":

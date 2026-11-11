@@ -26,6 +26,7 @@ from .tools import (
     tool_x402_challenge,
     tool_x402_confirm,
     tool_add_x402_step,
+    tool_check_payment_policy,
 )
 
 __version__ = "0.1.1"
@@ -47,4 +48,5 @@ __all__ = [
     "tool_x402_challenge",
     "tool_x402_confirm",
     "tool_add_x402_step",
+    "tool_check_payment_policy",
 ]

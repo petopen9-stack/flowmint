@@ -44,6 +44,7 @@ def create_action(
     description: str = "",
     require_approval: bool = True,
     tags: list[str] | None = None,
+    policy: dict | None = None,
 ) -> dict:
     action_id = str(uuid.uuid4())[:8]
     action = {
@@ -61,7 +62,7 @@ def create_action(
         "receipts": [],
         "last_hash": "genesis",
         "anchor": None,  # will hold NEAR tx hash or account storage info later
-        "meta": {},
+        "meta": {"policy": policy or {}},
     }
     for s in action["steps"]:
         s.setdefault("status", "pending")

@@ -1,0 +1,21 @@
+title: Safe research purchase
+description: An agent may buy research data only from an approved recipient.
+tags:
+  - agent-economy
+  - security
+policy:
+  max_per_payment_atomic: "1000000"
+  max_total_atomic: "2000000"
+  allowed_recipients:
+    - merchant.near
+  allowed_networks:
+    - near:mainnet
+steps:
+  - name: buy-research
+    type: x402
+    instruction: Request the approved research API and pay only within policy.
+    x402:
+      url: https://api.example.com/research
+      method: GET
+      max_amount: "1000000"
+      preferred_network: near:mainnet

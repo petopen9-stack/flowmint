@@ -20,6 +20,17 @@ You will see: create → human gates → **x402 challenge (mock 402)** → payme
 
 Full script: [DEMO.md](./DEMO.md)
 
+### Security demo
+
+```bash
+flowmint security-demo
+```
+
+This simulates a prompt-injected agent trying to send `9,000,000` atomic units
+to `attacker.near`. The deterministic policy engine blocks the payment before
+any payment intent can be signed, records `security_blocked` in the hash-chained
+audit trail, and reports **funds sent: 0**.
+
 ---
 
 ## Why this exists
@@ -30,7 +41,7 @@ Agents that move money need three things:
 2. **Policy control** — the agent must not be able to drain funds  
 3. **Standard rails** — [x402](https://x402.org) for HTTP micropayments, NEAR Intents for cross-chain settlement  
 
-FlowMint delivers (1) + (3) today and is structured for (2).
+FlowMint delivers (1) + (2) today and is structured for (3).
 
 ---
 
@@ -45,6 +56,8 @@ FlowMint delivers (1) + (3) today and is structured for (2).
 | `type: payment` steps | ✅ |
 | **Native x402** (`challenge` / `confirm`) | ✅ |
 | Offline one-command demo | ✅ |
+| Deterministic allow / warn / block policy engine | ✅ |
+| Prompt-injection payment block demo | ✅ |
 | Policy wallet stubs | ✅ foundation |
 
 ---
@@ -61,6 +74,7 @@ flowmint x402-confirm <id> --note "paid"
 flowmint history <id>
 flowmint anchor <id> --account you.near
 flowmint demo                            # full walkthrough
+flowmint security-demo                   # block a malicious payment
 ```
 
 ---
@@ -111,6 +125,14 @@ pip install pytest && python -m pytest tests/ -q
 
 State lives in `~/.flowmint/` and survives restarts.
 
+### Payment policy
+
+Actions can carry a policy with `max_per_payment_atomic`, `max_total_atomic`,
+`allowed_recipients`, `allowed_networks`, and approval thresholds. Every x402
+payment is checked before signing. A rejected payment pauses the action and
+adds a `security_blocked` receipt with the reasons; a payment requiring human
+review is recorded as `warn` and remains gated.
+
 ---
 
 ## Architecture
@@ -126,6 +148,7 @@ State lives in `~/.flowmint/` and survives restarts.
 
 - [x] Durable core + human gates + receipts  
 - [x] x402 challenge/confirm + offline demo  
+- [x] Deterministic payment policy + prompt-injection block demo
 - [ ] Live `@x402/near` / official `x402` Python signing helper  
 - [ ] Policy wallet contract (function-call key + limits)  
 - [ ] NEAR Intents inside payment steps  

@@ -19,6 +19,7 @@ from .x402 import (
     prepare_payment_intent,
     build_x402_step,
 )
+from .policy import evaluate_payment
 
 
 def tool_create(
@@ -27,6 +28,7 @@ def tool_create(
     description: str = "",
     require_approval: bool = True,
     tags: list[str] | None = None,
+    policy: dict | None = None,
 ) -> dict:
     if not steps:
         return {"ok": False, "error": "At least one step is required"}
@@ -34,7 +36,7 @@ def tool_create(
         if "name" not in s or "instruction" not in s:
             return {"ok": False, "error": f"Step {i} must have 'name' and 'instruction'"}
 
-    action = create_action(title, steps, description, require_approval, tags)
+    action = create_action(title, steps, description, require_approval, tags, policy)
     return {
         "ok": True,
         "action_id": action["id"],
@@ -217,6 +219,28 @@ def tool_anchor(action_id: str, near_account: str | None = None) -> dict:
     }
 
 
+def tool_check_payment_policy(action_id: str, payment: dict) -> dict:
+    """Evaluate a payment and persist the security decision before signing."""
+    a = load_action(action_id)
+    if not a:
+        return {"ok": False, "error": f"Action {action_id} not found"}
+
+    spent = sum(
+        int(r.get("detail", {}).get("amount", 0) or 0)
+        for r in get_receipt_chain(action_id)
+        if r.get("event") == "x402_challenged"
+    )
+    decision = evaluate_payment(a.get("meta", {}).get("policy"), payment, spent_atomic=spent)
+    event = "security_blocked" if decision["decision"] == "block" else "policy_decision"
+    append_receipt(a, event, decision)
+    from .core import _now
+    a["updated_at"] = _now()
+    if decision["decision"] == "block":
+        a["status"] = "paused"
+    save_action(a)
+    return {"ok": True, **decision}
+
+
 def tool_x402_challenge(
     action_id: str,
     status_code: int,
@@ -254,6 +278,23 @@ def tool_x402_challenge(
         return {"ok": False, "error": "No acceptable payment option in 402 response"}
 
     intent = prepare_payment_intent(parsed, option, payer_account=a.get("meta", {}).get("payer"))
+    policy_result = tool_check_payment_policy(action_id, {
+        "amount": option.get("amount"),
+        "pay_to": option.get("pay_to"),
+        "network": option.get("network"),
+        "asset": option.get("asset"),
+    })
+    if not policy_result.get("ok"):
+        return policy_result
+    if policy_result.get("decision") == "block":
+        return {
+            "ok": False,
+            "action_id": action_id,
+            "status": "paused",
+            "error": "Payment blocked by FlowMint policy",
+            "policy": policy_result,
+        }
+
     x["status"] = "challenged"
     x["challenge"] = parsed
     x["payment_payload"] = intent
@@ -276,6 +317,7 @@ def tool_x402_challenge(
         "status": a["status"],
         "x402_status": "challenged",
         "payment_intent": intent,
+        "policy": policy_result,
         "message": (
             "402 challenge recorded. Review the payment_intent, sign it with a policy-limited key, "
             "then call flowmint_x402_confirm after the paid request succeeds."
