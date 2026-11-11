@@ -1,4 +1,4 @@
-# FlowMint — Demo (offline, ~60–90 detik)
+# FlowMint — Demo (offline, ~90 detik)
 
 Tidak butuh network, testnet, atau API key. Cocok untuk rekaman & judge review.
 
@@ -24,6 +24,27 @@ Output yang diharapkan:
 4. Payment di-confirm (simulasi sign + retry)
 5. Receipt chain menampilkan `x402_challenged` → `step_completed` → `completed`
 6. Anchor root hash disiapkan untuk NEAR
+
+## Security segment
+
+Jalankan setelah demo utama:
+
+```bash
+flowmint security-demo
+```
+
+Output yang harus terlihat:
+
+```text
+Decision: BLOCK
+Funds sent: 0
+Audit receipt: security_blocked
+```
+
+Segmen ini adalah simulasi prompt injection. Jelaskan di video bahwa demo
+offline memakai mock payment proof; adapter PingPay live tersedia untuk quote
+dan settlement report, tetapi private key dan transaksi origin-chain tetap
+berada di wallet atau Agent API pengguna.
 
 ## Manual step-by-step (untuk video)
 
@@ -63,16 +84,22 @@ Agents that can pay need more than a wallet:
 • human / policy gates before money moves
 • hash-chained receipts
 • native x402 (HTTP 402 → sign → retry)
+• prompt-injection defense (malicious payment → BLOCKED)
 
 Offline demo in one command:
 flowmint demo
 
 Repo: https://github.com/petopen9-stack/flowmint
 #NEARHackathon @NEARProtocol
+
+Demo note: the recorded flow is offline/mock; FlowMint also includes an
+optional PingPay x402 quote/settle adapter that never stores private keys.
 ```
 
 ## Tips rekaman
 - Font terminal besar, tema gelap
 - Jalankan `flowmint demo` sekali full, lalu potong highlight
+- Jalankan `flowmint security-demo` dan sisipkan setelah payment flow
 - Tunjukkan baris `x402_challenged` di `history`
-- Sebut: “real signing plugs into @x402/near or a policy wallet; FlowMint keeps the workflow durable and auditable”
+- Tunjukkan `security_blocked` dan `Funds sent: 0`
+- Sebut: “This recording uses a mock payment proof. Real signing stays in a wallet or policy-bound Agent API; FlowMint keeps the workflow durable and auditable.”
